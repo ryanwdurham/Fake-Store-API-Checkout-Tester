@@ -36,7 +36,9 @@ I intentionally kept the UI simple so the demo focuses on **API behavior, valida
 4. Use **Checkout** or **Sync Cart (PUT)** buttons to simulate API calls  
 5. Toggle **Simulate API Failure** to visualize error handling and assertions
 
-Or just open it here! <a href="https://ryanwdurham.github.io/Fake-Store-API-Checkout-Tester/" target="_blank">Demo Link</a>
+Or just open it here! [Demo Link](https://ryanwdurham.github.io/Fake-Store-API-Checkout-Tester/)  
+*(Right-click and select "Open link in new tab")*
+
 
 
 
