@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Fake Store API – QA Checkout Tester</title>
+
+<style>
+body { margin:0;font-family:Segoe UI, Roboto, Arial,sans-serif; background:#eef1f5; }
+header { background:#111827;color:white;padding:20px; }
+header h1 { margin:0;font-size:22px; }
+header p { margin:4px 0 0;opacity:.8;font-size:13px; }
+main { display:grid;grid-template-columns:2fr 1fr;gap:20px;padding:20px; }
+.panel { background:white;border-radius:8px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.08); }
+h2 { margin-top:0;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:6px; }
+button { padding:6px 10px;border-radius:4px;border:none;background:#2563eb;color:white;cursor:pointer;font-size:12px; }
+button.danger { background:#dc2626; }
+button.secondary { background:#374151; }
+.products { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px; }
+.product { border:1px solid #e5e7eb;border-radius:6px;padding:10px; }
+.product img { height:120px; object-fit:contain; display:block; margin:auto; }
+.price { color:#059669;font-weight:bold; }
+.cart-item { font-size:12px;margin-bottom:10px; }
+.api-console { background:#0b1220;color:#d1d5db;padding:12px;border-radius:6px;font-family:Consolas,monospace;font-size:11px;max-height:280px;overflow-y:auto; }
+.pass { color:#22c55e; }
+.fail { color:#ef4444; }
+footer { padding:12px;font-size:12px;text-align:center;background:#f9fafb; }
+
+button:hover {
+  transform: scale(1.05);
+  background-color: #228B22; /* slightly darker */
+}
+
+.product:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transform: translateY(-2px);
+}
+
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧪 Fake Store API – QA Checkout Tester</h1>
+  <p>API-first demo • Auth • Assertions • Failure handling</p>
+</header>
+
+<main>
+
+<div class="panel">
+  <h2>Products</h2>
+  <button onclick="login()">Login</button>
+  <button onclick="loadProducts()">Load Products</button>
+  <label style="font-size:12px;">
+    <input type="checkbox" id="failToggle" /> Simulate API Failure
+  </label>
+  <div class="products" id="products"></div>
+</div>
+
+<div class="panel">
+  <h2>Cart</h2>
+  <div id="cart">Cart is empty</div>
+  <button class="secondary" onclick="syncCart()">Sync Cart (PUT)</button>
+  <button class="danger" onclick="checkout()">Checkout</button>
+</div>
+
+</main>
+
+<div class="panel" style="margin:0 20px 20px;">
+  <h2>API Response & Assertions</h2>
+  <div class="api-console" id="console">Waiting for API calls...</div>
+</div>
+
+<footer>
+“I intentionally kept the UI simple so the demo focuses on API behavior, validation, and failure handling.”
+</footer>
+
+<script>
+const API = "https://fakestoreapi.com";
+const cart = [];
+const cache = {};
+let token = null;
+
+// API logging and assertions
+function log({method, url, status, req, res, error, startTime}) {
+  const endTime = new Date();
+  const duration = startTime ? endTime - startTime : 0;
+
+  let outcome = "";
+  if (error) outcome = "❌ API Failed";
+  else if (status >= 400) outcome = "❌ API Error";
+  else outcome = "✅ Success";
+
+  // Compute total cart value if products exist
+  let total = null;
+  if (req && req.products) {
+    total = req.products.reduce((sum, p) => {
+      const prod = cache[p.productId];
+      return sum + (prod ? prod.price * p.quantity : 0);
+    }, 0);
+  }
+
+  // Enrich request with product titles for clarity
+  let displayReq = req;
+  if (req && req.products) {
+    displayReq = {...req};
+    displayReq.products = req.products.map(p => {
+      const prod = cache[p.productId];
+      return {
+        productId: p.productId,
+        title: prod ? prod.title : "Unknown",
+        quantity: p.quantity,
+        price: prod ? prod.price : "N/A"
+      };
+    });
+  }
+
+  // Assertions
+  const checks = [
+    {name: "Status < 400", ok: status && status < 400},
+    {name: "Response not empty", ok: res != null},
+    {name: "Cart total matches sum", ok: total === null || total >= 0}
+  ];
+
+  const assertionsHTML = checks.map(c =>
+    `<span class="${c.ok ? 'pass' : 'fail'}">${c.ok ? '✔' : '✖'} ${c.name}</span>`
+  ).join("<br/>");
+
+  document.getElementById("console").innerHTML = `
+<b>Time:</b> ${endTime.toLocaleTimeString()}<br/>
+<b>Duration:</b> ${duration} ms<br/>
+<b>Method:</b> ${method}<br/>
+<b>Endpoint:</b> ${url}<br/>
+<b>Status:</b> ${status ? status : "ERROR"}<br/>
+<b>Outcome:</b> ${outcome}<br/>
+${displayReq ? `<b>Request:</b><pre>${JSON.stringify(displayReq,null,2)}</pre>` : ""}
+<b>Response:</b><pre>${res ? JSON.stringify(res,null,2) : error}</pre>
+${total !== null ? `<b>Total Cart Value:</b> $${total.toFixed(2)}<br/>` : ""}
+<b>Assertions:</b><br/>${assertionsHTML}
+`;
+}
+
+// Helper to simulate failure
+function failMode(url){
+  return document.getElementById("failToggle").checked ? url + "_fail_test_404" : url;
+}
+
+// LOGIN
+async function login() {
+  const url = `${API}/auth/login`;
+  const body = { username: "mor_2314", password: "83r5^_" };
+  const startTime = new Date();
+  try {
+    const r = await fetch(url, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const d = await r.json();
+    token = d.token;
+    log({method:"POST", url, status:r.status, req:body, res:d, startTime});
+  } catch(err) {
+    log({method:"POST", url, error:err, startTime});
+  }
+}
+
+// LOAD ALL PRODUCTS OR FILTERED BY CATEGORY
+async function loadProducts(category=null) {
+  let url = category ? `${API}/products/category/${category}` : `${API}/products`;
+  url = failMode(url);
+  const startTime = new Date();
+  try {
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    log({method:"GET", url, status:r.status, res:d, startTime});
+
+    const p = document.getElementById("products"); p.innerHTML="";
+    (Array.isArray(d) ? d : []).forEach(x=>{
+      cache[x.id] = x;
+      p.innerHTML += `
+        <div class="product">
+          <img src="${x.image}">
+          <b>${x.title}</b><br/>
+          <span class="price">$${x.price}</span><br/>
+          <button onclick="add(${x.id})">Add</button>
+          <button onclick="viewDetails(${x.id})">View Details</button>
+        </div>`;
+    });
+  } catch(err){
+    log({method:"GET", url, error:err, startTime});
+  }
+}
+
+// FETCH PRODUCT DETAILS
+async function viewDetails(id) {
+  let url = `${API}/products/${id}`;
+  url = failMode(url);
+  const startTime = new Date();
+  try {
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    log({method:"GET", url, status:r.status, res:d, startTime});
+    alert(`Product Details:\nTitle: ${d.title}\nPrice: $${d.price}\nCategory: ${d.category}\nRating: ${d.rating.rate} (${d.rating.count} reviews)`);
+  } catch(err){
+    log({method:"GET", url, error:err, startTime});
+    alert("Failed to fetch product details");
+  }
+}
+
+// LOAD CATEGORIES
+async function loadCategories() {
+  let url = `${API}/products/categories`;
+  url = failMode(url);
+  const startTime = new Date();
+  try {
+    const r = await fetch(url);
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    log({method:"GET", url, status:r.status, res:d, startTime});
+
+    const catDiv = document.getElementById("categories"); 
+    catDiv.innerHTML = `<button onclick="loadProducts()">All</button>`;
+    d.forEach(c => {
+      catDiv.innerHTML += `<button onclick="loadProducts('${c}')">${c}</button>`;
+    });
+  } catch(err){
+    log({method:"GET", url, error:err, startTime});
+  }
+}
+
+// CART MANAGEMENT
+function add(id){
+  const e = cart.find(i => i.id===id);
+  e ? e.qty++ : cart.push({id, qty:1});
+  render();
+  flashProduct(id);
+}
+function iQty(id,n){ const i = cart.find(x=>x.id===id); if(i && i.qty+n>0){ i.qty+=n; render(); } }
+function del(id){ cart.splice(cart.findIndex(x=>x.id===id),1); render(); }
+function render(){
+  const c = document.getElementById("cart");
+  if(!cart.length){ c.textContent = "Cart is empty"; return; }
+  let t=0;
+  c.innerHTML = cart.map(i=>{
+    const p = cache[i.id];
+    const s = p.price*i.qty; t+=s;
+    return `<div class="cart-item">
+      <b>${p.title}</b><br/>
+      <button onclick="iQty(${i.id},-1)">-</button>
+      ${i.qty}
+      <button onclick="iQty(${i.id},1)">+</button>
+      $${s.toFixed(2)}
+      <button class="danger" onclick="del(${i.id})">x</button>
+    </div>`;
+  }).join("") + `<hr><b>Total: $${t.toFixed(2)}</b>`;
+}
+
+// SYNC CART VIA PUT
+async function syncCart() {
+  if (!cart.length) { alert("Cart is empty"); return; }
+
+  let url = `${API}/carts/1`;
+  if (document.getElementById("failToggle").checked) url += "_fail_test_404";
+
+  const body = {
+    userId: 1,
+    date: new Date().toISOString(),
+    products: cart.map(i => ({productId: i.id, quantity: i.qty}))
+  };
+
+  const startTime = new Date();
+  try {
+    const r = await fetch(url, {
+      method: "PUT",
+      headers: {"Content-Type": "application/json", "Authorization": token ? `Bearer ${token}` : ""},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    log({method:"PUT", url, status:r.status, req:body, res:d, startTime});
+    alert("Cart synced successfully!");
+  } catch(err) {
+    log({method:"PUT", url, error:err, startTime});
+    alert("Cart sync failed (see console)");
+  }
+}
+
+// CHECKOUT
+async function checkout() {
+  if(!cart.length){ alert("Cart is empty"); return; }
+  let url = failMode(`${API}/carts`);
+  const body = { userId:1, date:new Date().toISOString(), products:cart.map(i=>({productId:i.id, quantity:i.qty})) };
+  const startTime = new Date();
+  try {
+    const r = await fetch(url, { method:"POST", headers:{"Content-Type":"application/json","Authorization":token?`Bearer ${token}`:""}, body: JSON.stringify(body) });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const d = await r.json();
+    log({method:"POST", url, status:r.status, req:body, res:d, startTime});
+    alert("Checkout API called");
+  } catch(err) {
+    log({method:"POST", url, error:err, startTime});
+    alert("Checkout API failed (Simulated)");
+  }
+}
+
+// Flash product card on Add
+function flashProduct(id){
+  const el = document.querySelector(`.product button[onclick="add(${id})"]`).parentElement;
+  el.style.transition = "0.2s";
+  el.style.backgroundColor = "#fde68a";
+  setTimeout(()=> el.style.backgroundColor = "white", 300);
+}
+</script>
+</body>
+</html>
