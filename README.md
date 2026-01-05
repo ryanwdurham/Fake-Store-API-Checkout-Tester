@@ -2,9 +2,7 @@
 
 **Interactive API-first demo for exploring e-commerce checkout flows, assertions, and failure handling.**  
 
-Test adding products to a cart, simulate checkout, handle failures, and see **live API responses with pass/fail assertions and timestamps** ✅ / ❌ 
-
-— all in a **visual, hands-on front-end app** designed for **QA demos, workshops, and presentations**.  
+Test adding products to a cart, simulate checkout, handle failures, and see **live API responses with pass/fail assertions and timestamps** — all in a **visual, hands-on front-end app** designed for **QA demos, workshops, and presentations**.  
 
 I intentionally kept the UI simple so the demo focuses on **API behavior, validation, and failure handling**.
 
