@@ -1,4 +1,4 @@
-# 💻Fake-Store QA Playground – API Checkout Tester 🛒
+# 💻 Fake-Store QA Playground – API Checkout Tester 🛒
 
 **Interactive AP I-first demo for exploring e-commerce checkout flows, assertions, and failure handling.**  
 
